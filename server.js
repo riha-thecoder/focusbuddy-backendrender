@@ -58,16 +58,17 @@ app.post('/sessions', async (req, res) => {
   if (!title || !email) return res.status(400).send('Title and email are required.');
 
   try {
-    await pool.query(
-      'INSERT INTO sessions (title, description, email) VALUES ($1, $2, $3)',
+    const result = await pool.query(
+      'INSERT INTO sessions (title, description, email) VALUES ($1, $2, $3) RETURNING *',
       [title, description, email]
     );
-    res.status(201).send('Session added.');
+    res.status(201).json(result.rows[0]); // ✅ Return the inserted session as JSON
   } catch (err) {
     console.error(err);
     res.status(500).send('Failed to add session.');
   }
 });
+
 
 // ✅ DELETE session by ID
 app.delete('/sessions/:id', async (req, res) => {
