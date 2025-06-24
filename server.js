@@ -13,10 +13,9 @@ const fs = require('fs');
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// ✅ Middlewares
+// ✅ Middleware
 app.use(cors({
-  origin: 'http://localhost:3000', // adjust if needed
-  credentials: true
+  origin: '*',  // ✅ Allow all origins or adjust for production
 }));
 app.use(express.json());
 
@@ -28,7 +27,7 @@ const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
 });
 
-// ✅ Setup SendGrid
+// ✅ Setup SendGrid with env var
 sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
 // ✅ Root route
@@ -52,23 +51,24 @@ app.get('/sessions', async (req, res) => {
   }
 });
 
-// ✅ POST new session
+// ✅ POST new session (SAFE + proper JSON return)
 app.post('/sessions', async (req, res) => {
   const { title, description, email } = req.body;
-  if (!title || !email) return res.status(400).send('Title and email are required.');
+  if (!title || !email) {
+    return res.status(400).send('Title and email are required.');
+  }
 
   try {
     const result = await pool.query(
       'INSERT INTO sessions (title, description, email) VALUES ($1, $2, $3) RETURNING *',
       [title, description, email]
     );
-    res.status(201).json(result.rows[0]); // ✅ Return the inserted session as JSON
+    res.status(201).json(result.rows[0]);
   } catch (err) {
     console.error(err);
     res.status(500).send('Failed to add session.');
   }
 });
-
 
 // ✅ DELETE session by ID
 app.delete('/sessions/:id', async (req, res) => {
@@ -104,7 +104,7 @@ app.get('/test-email', async (req, res) => {
 cron.schedule('0 8 * * *', async () => {
   console.log('⏰ Running daily reminder emails for all users...');
   try {
-    const result = await pool.query('SELECT DISTINCT email FROM sessions');
+    const result = await pool.query('SELECT email FROM users');
     const users = result.rows;
 
     if (users.length === 0) {
@@ -119,7 +119,6 @@ cron.schedule('0 8 * * *', async () => {
         subject: 'Your Daily FocusBuddy Reminder 🐥',
         html: emailTemplate,
       };
-
       await sgMail.send(msg);
       console.log(`✅ Reminder sent to: ${user.email}`);
     }
