@@ -13,9 +13,10 @@ const fs = require('fs');
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// ✅ Middleware
 app.use(cors({
-  origin: '*',  // ✅ Allow all origins or adjust for production
+  origin: 'http://localhost:3000', // ✅ allow your local frontend
+  methods: ['GET', 'POST'],
+  credentials: true
 }));
 app.use(express.json());
 
