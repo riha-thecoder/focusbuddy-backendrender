@@ -1,7 +1,5 @@
 // ✅ Load environment variables
-require('dotenv').config();
-console.log('DATABASE_URL:', process.env.DATABASE_URL);
-console.log('SENDGRID_API_KEY:', process.env.SENDGRID_API_KEY ? '✅ Loaded' : '❌ MISSING');
+require('dotenv').config(); // ✅ Always first
 
 const express = require('express');
 const cors = require('cors');
@@ -11,13 +9,18 @@ const cron = require('node-cron');
 const fs = require('fs');
 
 const app = express();
-const PORT = process.env.PORT || 5000;
 
+// ✅ CORS config (including Netlify frontend)
 app.use(cors({
-  origin: 'http://localhost:3000', // ✅ allow your local frontend
-  methods: ['GET', 'POST'],
+  origin: [
+    'http://localhost:3000', // local dev
+    'https://delightful-dolphin-c130ca.netlify.app' // Netlify live
+  ],
+  methods: ['GET', 'POST', 'DELETE'],
   credentials: true
 }));
+
+// ✅ Needed to parse JSON body in requests
 app.use(express.json());
 
 // ✅ Load email template
@@ -129,6 +132,8 @@ cron.schedule('0 8 * * *', async () => {
     console.error('❌ Failed to send reminders:', err);
   }
 });
+// ✅ Define PORT (put this before app.listen)
+const PORT = process.env.PORT || 5000;
 
 // ✅ Start server
 app.listen(PORT, () => {
