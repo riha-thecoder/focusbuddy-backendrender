@@ -1,142 +1,106 @@
-// ✅ Load environment variables
-require('dotenv').config(); // ✅ Always first
-
 const express = require('express');
 const cors = require('cors');
+const bodyParser = require('body-parser');
 const { Pool } = require('pg');
-const sgMail = require('@sendgrid/mail');
-const cron = require('node-cron');
-const fs = require('fs');
 
 const app = express();
+const port = 5050;
 
-// ✅ CORS config (including Netlify frontend)
-app.use(cors({
-  origin: [
-    'http://localhost:3000', // local dev
-    'https://delightful-dolphin-c130ca.netlify.app' // Netlify live
-  ],
-  methods: ['GET', 'POST', 'DELETE'],
-  credentials: true
-}));
+// Enable CORS for all origins (for frontend localhost:5501)
+app.use(cors());
+app.use(bodyParser.json());
 
-// ✅ Needed to parse JSON body in requests
-app.use(express.json());
-
-// ✅ Load email template
-const emailTemplate = fs.readFileSync('email_template.html', 'utf8');
-
-// ✅ PostgreSQL connection
+// PostgreSQL connection setup
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
+  user: 'postgres',           // change if your db user is different
+  host: 'localhost',
+  database: 'focusbuddy',     // make sure this DB exists
+  password: 'yourpassword',   // update with your actual PostgreSQL password
+  port: 5432,
 });
 
-// ✅ Setup SendGrid with env var
-sgMail.setApiKey(process.env.SENDGRID_API_KEY);
-
-// ✅ Root route
-app.get('/', (req, res) => {
-  res.send('✅ FocusBuddy backend is running!');
+// Test DB connection
+pool.connect((err, client, release) => {
+  if (err) {
+    return console.error('Error acquiring client', err.stack);
+  }
+  console.log('Connected to PostgreSQL');
+  release();
 });
 
-// ✅ Session test route
-app.get('/session', (req, res) => {
-  res.json({ message: '✅ Session loaded successfully!' });
-});
+// Routes
 
-// ✅ GET all sessions
+// Get all sessions
 app.get('/sessions', async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM sessions ORDER BY id DESC');
+    const result = await pool.query('SELECT * FROM sessions ORDER BY date DESC');
     res.json(result.rows);
   } catch (err) {
-    console.error(err);
-    res.status(500).send('Failed to load sessions.');
+    console.error('Error fetching sessions:', err.message);
+    res.status(500).send('Server error fetching sessions');
   }
 });
 
-// ✅ POST new session (SAFE + proper JSON return)
+// Add new session
 app.post('/sessions', async (req, res) => {
-  const { title, description, email } = req.body;
-  if (!title || !email) {
-    return res.status(400).send('Title and email are required.');
-  }
-
   try {
+    const { title, description, email, category, date } = req.body;
     const result = await pool.query(
-      'INSERT INTO sessions (title, description, email) VALUES ($1, $2, $3) RETURNING *',
-      [title, description, email]
+      'INSERT INTO sessions (title, description, email, category, date) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+      [title, description, email, category, date]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
-    console.error(err);
-    res.status(500).send('Failed to add session.');
+    console.error('Error saving session:', err.message);
+    res.status(500).send('Server error saving session');
+  }
+});
+// Update session by ID
+app.put('/sessions/:id', async (req, res) => {
+  try {
+    const { title, description, email, category, date } = req.body;
+    const { id } = req.params;
+
+    const result = await pool.query(
+      `UPDATE sessions
+       SET title = $1, description = $2, email = $3, category = $4, date = $5
+       WHERE id = $6
+       RETURNING *`,
+      [title, description, email, category, date, id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).send('Session not found');
+    }
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('Error updating session:', err.message);
+    res.status(500).send('Server error updating session');
   }
 });
 
-// ✅ DELETE session by ID
+// Delete session by ID
 app.delete('/sessions/:id', async (req, res) => {
-  const { id } = req.params;
   try {
-    await pool.query('DELETE FROM sessions WHERE id = $1', [id]);
-    res.send('Session deleted.');
-  } catch (err) {
-    console.error(err);
-    res.status(500).send('Failed to delete session.');
-  }
-});
+    const { id } = req.params;
 
-// ✅ TEST EMAIL route
-app.get('/test-email', async (req, res) => {
-  const msg = {
-    to: 'rihashuaib0715@gmail.com',
-    from: 'focusbuddy66@gmail.com',
-    subject: 'FocusBuddy Test Email 🐥',
-    html: emailTemplate,
-  };
+    const result = await pool.query(
+      'DELETE FROM sessions WHERE id = $1 RETURNING *',
+      [id]
+    );
 
-  try {
-    await sgMail.send(msg);
-    res.send('✅ Test email sent! Check your inbox.');
-  } catch (err) {
-    console.error('❌ Failed to send test email:', err);
-    res.status(500).send('❌ Failed to send test email.');
-  }
-});
-
-// ✅ DAILY REMINDER JOB
-cron.schedule('0 8 * * *', async () => {
-  console.log('⏰ Running daily reminder emails for all users...');
-  try {
-    const result = await pool.query('SELECT email FROM users');
-    const users = result.rows;
-
-    if (users.length === 0) {
-      console.log('ℹ️ No users to remind.');
-      return;
+    if (result.rows.length === 0) {
+      return res.status(404).send('Session not found');
     }
 
-    for (const user of users) {
-      const msg = {
-        to: user.email,
-        from: 'focusbuddy66@gmail.com',
-        subject: 'Your Daily FocusBuddy Reminder 🐥',
-        html: emailTemplate,
-      };
-      await sgMail.send(msg);
-      console.log(`✅ Reminder sent to: ${user.email}`);
-    }
-
-    console.log('🎉 All reminders sent successfully.');
+    res.sendStatus(204);
   } catch (err) {
-    console.error('❌ Failed to send reminders:', err);
+    console.error('Error deleting session:', err.message);
+    res.status(500).send('Server error deleting session');
   }
 });
-// ✅ Define PORT (put this before app.listen)
-const PORT = process.env.PORT || 5000;
 
-// ✅ Start server
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on http://localhost:${PORT}`);
+app.listen(port, () => {
+  console.log(`🚀 Server running at http://localhost:${port}`);
 });
-
