@@ -4,7 +4,7 @@ const bodyParser = require('body-parser');
 const { Pool } = require('pg');
 
 const app = express();
-const port = 5050;
+const port = process.env.PORT || 5050;
 
 // Enable CORS for all origins (for frontend localhost:5501)
 app.use(cors());
@@ -12,13 +12,11 @@ app.use(bodyParser.json());
 
 // PostgreSQL connection setup
 const pool = new Pool({
-  user: 'postgres',           // change if your db user is different
-  host: 'localhost',
-  database: 'focusbuddy',     // make sure this DB exists
-  password: 'yourpassword',   // update with your actual PostgreSQL password
-  port: 5432,
+  connectionString: process.env.DATABASE_URL,
+  ssl: {
+    rejectUnauthorized: false 
+  }
 });
-
 // Test DB connection
 pool.connect((err, client, release) => {
   if (err) {
