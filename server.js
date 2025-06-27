@@ -98,6 +98,9 @@ app.delete('/sessions/:id', async (req, res) => {
     res.status(500).send('Server error deleting session');
   }
 });
+app.get('/', (req, res) => {
+  res.send('FocusBuddy backend is running!');
+});
 
 app.listen(port, () => {
   console.log(`🚀 Server running at http://localhost:${port}`);
